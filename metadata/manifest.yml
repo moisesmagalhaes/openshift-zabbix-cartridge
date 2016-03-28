@@ -1,0 +1,50 @@
+Name: zabbix
+Cartridge-Short-Name: ZABBIX
+Display-Name: Zabbix
+Version: "3.0.1"
+Website: https://github.com/a13m/openshift-zabbix-cartridge
+Cartridge-Version: 0.0.1
+Cartridge-Vendor: tiess 
+Categories:
+  - service
+  - web_framework
+  - domain_scope
+Provides:
+  - zabbix
+Scaling:
+  Min: 1
+  Max: 2
+Publishes:
+  get-php-ini:
+    Type: FILESYSTEM:php-ini
+  publish-http-url:
+    Type: NET_TCP:httpd-proxy-info
+  publish-gear-endpoint:
+    Type: NET_TCP:gear-endpoint-info
+Subscribes:
+  set-env:
+    Type: ENV:*
+    Required: false
+  set-mysql-connection-info:
+    Type: NET_TCP:db:mysql
+    Required: true
+Endpoints:
+- Private-IP-Name: IP
+  Private-Port-Name: PORT
+  Private-Port: 8080
+  Public-Port-Name: PROXY_PORT
+  Protocols: [http, ws]
+  Mappings:
+  - Frontend: ''
+    Backend: ''
+    Options:
+      websocket: true
+  - Frontend: /health
+    Backend: ''
+    Options:
+      health: true
+- Private-IP-Name: IP
+  Private-Port-Name: SERVER_PORT
+  Private-Port: 10051
+  Public-Port-Name: SERVER_PROXY_PORT
+

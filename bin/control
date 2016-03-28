@@ -1,0 +1,161 @@
+#!/bin/bash -e
+
+ZABBIX_PID_FILE=$OPENSHIFT_ZABBIX_DIR/run/zabbix.pid
+name="zabbix"
+
+#
+#  main():
+#
+
+# Ensure arguments.
+if ! [ $# -gt 0 ]; then
+    echo "Usage: $0 [start|restart|graceful|graceful-stop|stop|status|update|use-source]"
+    exit 1
+fi
+
+source $OPENSHIFT_CARTRIDGE_SDK_BASH
+
+HTTPD_CFG_FILE=$OPENSHIFT_ZABBIX_DIR/configuration/etc/conf/httpd_nolog.conf
+HTTPD_CFG_DIR=$OPENSHIFT_ZABBIX_DIR/configuration/etc/conf.d
+HTTPD_PASSENV_FILE=$HTTPD_CFG_DIR/passenv.conf
+HTTPD_PID_FILE=$OPENSHIFT_ZABBIX_DIR/run/httpd.pid
+
+function start_zabbix() {
+    if ! [ -f $OPENSHIFT_ZABBIX_DIR/etc/.configured ]; then
+      return 0
+    fi
+
+    if ! [ -f $ZABBIX_PID_FILE ]; then
+        nohup $OPENSHIFT_ZABBIX_DIR/sbin/zabbix_server -c $OPENSHIFT_ZABBIX_DIR/etc/zabbix_server.conf
+        ret=$?
+	return 0
+        if [ $ret -ne 0 ]; then
+            echo "$name failed to start - $ret" 1>&2
+            return $ret
+        fi
+    fi
+}
+
+function stop_zabbix() {
+  if [ -f $ZABBIX_PID_FILE ]; then
+	  zpid=$( cat ZABBIX_PID_FILE )
+	  wait_for_stop $zpid
+	  kill $zpid
+  fi
+}
+
+function apache() {
+    [ "$1" != "stop" ] && write_httpd_passenv $HTTPD_PASSENV_FILE
+    ensure_valid_httpd_process "$HTTPD_PID_FILE" "$HTTPD_CFG_FILE"
+    /usr/sbin/httpd -C "Include $HTTPD_CFG_DIR/*.conf" -f $HTTPD_CFG_FILE -k $1
+    ret=$?
+    if [ "$1" == "start" ] ; then
+      for i in {1..5} ; do
+        test -f "$HTTPD_PID_FILE" && break;
+        sleep 1;
+      done
+    elif [ "$1" == "stop" ]; then
+      if [ -f "$HTTPD_PID_FILE" ]; then
+        httpd_pid=`cat "$HTTPD_PID_FILE" 2> /dev/null`
+        wait_for_stop $httpd_pid
+	echo "$httpd_pid" | xargs kill
+      fi
+    fi
+    return $ret
+}
+
+function do_start() {
+  start_zabbix
+  apache start
+  if [ -n "$OPENSHIFT_ZABBIX_SERVER_PROXY_PORT" ]; then
+    add_domain_env_var "ZABBIX_SERVER_IP=$( facter -p ipaddress )"
+    add_domain_env_var "ZABBIX_SERVER_PORT=$OPENSHIFT_ZABBIX_SERVER_PROXY_PORT"
+  fi
+}
+
+function restart() {
+  do_stop
+  do_start
+  return $?
+}
+
+function do_stop() {
+  apache stop || true
+  stop_zabbix || true
+}
+
+function configtest() {
+    client_message "Testing Apache *.conf files"
+    /usr/sbin/httpd -C "Include $HTTPD_CFG_DIR/*.conf" -f $HTTPD_CFG_FILE -t
+    return $?
+}
+
+function status() {
+   if [ -f $ZABBIX_PID_FILE ] && ( kill -0 $(cat $ZABBIX_PID_FILE) ); then
+       client_result "$name is running"
+   fi
+   if output=$(curl http://$OPENSHIFT_ZABBIX_IP:$OPENSHIFT_ZABBIX_PORT/server-status?auto 2>&1 )
+   then
+      client_result "Application is running"
+      client_result $output
+      return 0
+   else
+      client_result "Application is either stopped or inaccessible"
+      # FIXME: We should return 1 once we can handle non-zero return statuses
+      #        (This should be possible after we remove the v1 logic completely)
+      return 0
+   fi
+}
+
+function tidy() {
+    client_message "Emptying log dir: $OPENSHIFT_ZABBIX_LOG_DIR"
+    shopt -s dotglob
+    rm -rf $OPENSHIFT_ZABBIX_LOG_DIR/*
+    return 0
+}
+
+function build() {
+    echo "Building PHP cartridge"
+    if [ -f "${OPENSHIFT_REPO_DIR}/.openshift/markers/force_clean_build" ]
+    then
+        echo ".openshift/markers/force_clean_build found!  Recreating pear libs" 1>&2
+        rm -rf "${OPENSHIFT_ZABBIX_DIR}"/phplib/pear/*
+        mkdir -p "${OPENSHIFT_ZABBIX_DIR}"/phplib/pear/{docs,ext,php,cache,cfg,data,download,temp,tests,www}
+    fi
+
+    if [ -f ${OPENSHIFT_REPO_DIR}deplist.txt ]
+    then
+        for f in $(cat ${OPENSHIFT_REPO_DIR}deplist.txt)
+        do
+            echo "Checking pear: $f"
+            echo
+            if pear list "$f" > /dev/null
+            then
+                pear upgrade "$f"
+            elif ! ( php -c "${OPENSHIFT_ZABBIX_DIR}"/conf -m | grep -i -q \^`basename "$f"`\$ )
+            then
+                pear install --alldeps "$f"
+            else
+                echo "Extension already installed in the system: $f"
+            fi
+            # Remove gear-specific absolute paths from the generated PEAR files
+            find ${OPENSHIFT_ZABBIX_DIR}phplib/pear/pear/ -type f ! -name '.*' -exec sed -i "s|${OPENSHIFT_HOMEDIR}|~/|g" {} \;
+        done
+    fi
+    return 0
+}
+
+case "$1" in
+  start)           echo "Starting PHP cartridge";   do_start ;;
+  stop)            echo "Stopping PHP cartridge";   do_stop ;;
+  restart)         echo "Restarting PHP cartridge"; restart ;;
+  reload|graceful) echo "Reloading PHP cartridge";  apache graceful ;;
+  status)          status ;;
+  configtest)      configtest ;;
+  tidy)            tidy ;;
+  build)           build ;;
+  deploy)          exit 0 ;; # Nothing to deploy on template PHP cartridge
+  *)               exit 0
+esac
+
+exit $?
