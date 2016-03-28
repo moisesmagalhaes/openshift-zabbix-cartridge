@@ -17,13 +17,13 @@ contain the zabbix binaries, and will not work on its own.
 
 There is a companion cartridge for the zabbix agent being developed here:
 
-https://github.com/a13m/openshift-zabbix-agent-cartridge
+https://github.com/moisesmagalhaes/openshift-zabbix-cartridge
 
 It is also built using the CDK.  To monitor a gear, the process is:
 
 1. Add the agent cartridge to your application:
 
-    rhc cartridge add -a <appname> http://zagent-agrimm.rhcloud.com/build/manifest/master
+    rhc cartridge add -a <appname> https://github.com/moisesmagalhaes/openshift-zabbix-cartridge
 
 2. In the Zabbix UI, go to hosts
 3. Select "create host" near the upper-right corner of the screen

@@ -2,7 +2,7 @@ Name: zabbix
 Cartridge-Short-Name: ZABBIX
 Display-Name: Zabbix
 Version: "3.0.1"
-Website: https://github.com/a13m/openshift-zabbix-cartridge
+Website: https://github.com/moisesmagalhaes/openshift-zabbix-cartridge 
 Cartridge-Version: 0.0.1
 Cartridge-Vendor: tiess 
 Categories:
