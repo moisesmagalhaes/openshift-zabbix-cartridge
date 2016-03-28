@@ -12,7 +12,7 @@ curl -L -o zabbix-${ZABBIX_VERSION}.tar.gz http://sourceforge.net/projects/zabbi
 tar -C $BUILDROOT -xzf zabbix-${ZABBIX_VERSION}.tar.gz
 
 pushd zabbix-${ZABBIX_VERSION}
-./configure --enable-server --enable-agent --with-mysql --enable-ipv6 --with-libcurl --with-libxml2 --prefix $ZABBIX_DIR
+./configure --enable-server --with-mysql --enable-ipv6 --with-libcurl --with-libxml2 --prefix $ZABBIX_DIR
 make
 make install
 cp -a frontends/php $ZABBIX_DIR/
