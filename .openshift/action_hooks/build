@@ -1,0 +1,26 @@
+#!/bin/sh
+
+source $OPENSHIFT_CARTRIDGE_SDK_BASH
+
+ZABBIX_VERSION=3.0.1
+ZABBIX_DIR=$( pwd )
+BUILDROOT=$( mktemp -d )
+
+pushd $BUILDROOT
+
+curl -L -o zabbix-${ZABBIX_VERSION}.tar.gz http://sourceforge.net/projects/zabbix/files/ZABBIX%20Latest%20Stable/${ZABBIX_VERSION}/zabbix-${ZABBIX_VERSION}.tar.gz/download
+tar -C $BUILDROOT -xzf zabbix-${ZABBIX_VERSION}.tar.gz
+
+pushd zabbix-${ZABBIX_VERSION}
+./configure --enable-server --enable-agent --with-mysql --enable-ipv6 --with-net-snmp --with-libcurl --with-libxml2 --prefix $ZABBIX_DIR
+make
+make install
+cp -a frontends/php $ZABBIX_DIR/
+cp -a database/mysql $ZABBIX_DIR/
+popd
+
+popd
+rm -rf $BUILDROOT
+
+mv usr/bin/zabbix-import-template.py usr/bin/zabbix-import-template
+mv usr/bin/zabbix-add-host.rb usr/bin/zabbix-add-host
